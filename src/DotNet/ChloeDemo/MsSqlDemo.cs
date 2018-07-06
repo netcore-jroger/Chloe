@@ -24,7 +24,9 @@ namespace ChloeDemo
             JoinQuery();
             AggregateQuery();
             GroupQuery();
+            ComplexQuery();  /* v2.18复杂查询 */
             Insert();
+            BulkInsert();
             Update();
             Delete();
             Method();
@@ -45,16 +47,57 @@ namespace ChloeDemo
              * SELECT TOP (1) [Users].[Id] AS [Id],[Users].[Name] AS [Name],[Users].[Gender] AS [Gender],[Users].[Age] AS [Age],[Users].[CityId] AS [CityId],[Users].[OpTime] AS [OpTime] FROM [Users] AS [Users] WHERE [Users].[Id] = 1
              */
 
+
             //可以选取指定的字段
             q.Where(a => a.Id == 1).Select(a => new { a.Id, a.Name }).FirstOrDefault();
             /*
              * SELECT TOP (1) [Users].[Id] AS [Id],[Users].[Name] AS [Name] FROM [Users] AS [Users] WHERE [Users].[Id] = 1
              */
 
+
             //分页
             q.Where(a => a.Id > 0).OrderBy(a => a.Age).Skip(20).Take(10).ToList();
             /*
              * SELECT TOP (10) [T].[Id] AS [Id],[T].[Name] AS [Name],[T].[Gender] AS [Gender],[T].[Age] AS [Age],[T].[CityId] AS [CityId],[T].[OpTime] AS [OpTime] FROM (SELECT [Users].[Id] AS [Id],[Users].[Name] AS [Name],[Users].[Gender] AS [Gender],[Users].[Age] AS [Age],[Users].[CityId] AS [CityId],[Users].[OpTime] AS [OpTime],ROW_NUMBER() OVER(ORDER BY [Users].[Age] ASC) AS [ROW_NUMBER_0] FROM [Users] AS [Users] WHERE [Users].[Id] > 0) AS [T] WHERE [T].[ROW_NUMBER_0] > 20
+             */
+
+
+            /* like 查询 */
+            q.Where(a => a.Name.Contains("so") || a.Name.StartsWith("s") || a.Name.EndsWith("o")).ToList();
+            /*
+             * SELECT 
+             *      [Users].[Gender] AS [Gender],[Users].[Age] AS [Age],[Users].[CityId] AS [CityId],[Users].[OpTime] AS [OpTime],[Users].[Id] AS [Id],[Users].[Name] AS [Name] 
+             * FROM [Users] AS [Users] 
+             * WHERE ([Users].[Name] LIKE '%' + N'so' + '%' OR [Users].[Name] LIKE N's' + '%' OR [Users].[Name] LIKE '%' + N'o')
+             */
+
+
+            /* in 一个数组 */
+            List<User> users = null;
+            List<int> userIds = new List<int>() { 1, 2, 3 };
+            users = q.Where(a => userIds.Contains(a.Id)).ToList(); /* list.Contains() 方法组合就会生成 in一个数组 sql 语句 */
+            /*
+             * SELECT 
+             *      [Users].[Gender] AS [Gender],[Users].[Age] AS [Age],[Users].[CityId] AS [CityId],[Users].[OpTime] AS [OpTime],[Users].[Id] AS [Id],[Users].[Name] AS [Name]
+             * FROM [Users] AS [Users] 
+             * WHERE [Users].[Id] IN (1,2,3)
+             */
+
+
+            /* in 子查询 */
+            users = q.Where(a => context.Query<City>().Select(c => c.Id).ToList().Contains((int)a.CityId)).ToList(); /* IQuery<T>.ToList().Contains() 方法组合就会生成 in 子查询 sql 语句 */
+            /*
+             * SELECT 
+             *      [Users].[Gender] AS [Gender],[Users].[Age] AS [Age],[Users].[CityId] AS [CityId],[Users].[OpTime] AS [OpTime],[Users].[Id] AS [Id],[Users].[Name] AS [Name]
+             * FROM [Users] AS [Users] 
+             * WHERE [Users].[CityId] IN (SELECT [City].[Id] AS [C] FROM [City] AS [City])
+             */
+
+
+            /* distinct 查询 */
+            q.Select(a => new { a.Name }).Distinct().ToList();
+            /*
+             * SELECT DISTINCT [Users].[Name] AS [Name] FROM [Users] AS [Users]
              */
 
             ConsoleHelper.WriteLineAndReadKey();
@@ -80,8 +123,8 @@ namespace ChloeDemo
 
 
             /* quick join and paging. */
-            context.JoinQuery<User, City>((user, city) => new object[] 
-            { 
+            context.JoinQuery<User, City>((user, city) => new object[]
+            {
                 JoinType.LeftJoin, user.CityId == city.Id
             })
             .Select((user, city) => new { User = user, City = city })
@@ -90,8 +133,8 @@ namespace ChloeDemo
             .TakePage(1, 20)
             .ToList();
 
-            context.JoinQuery<User, City, Province>((user, city, province) => new object[] 
-            { 
+            context.JoinQuery<User, City, Province>((user, city, province) => new object[]
+            {
                 JoinType.LeftJoin, user.CityId == city.Id,          /* 表 User 和 City 进行Left连接 */
                 JoinType.LeftJoin, city.ProvinceId == province.Id   /* 表 City 和 Province 进行Left连接 */
             })
@@ -107,12 +150,12 @@ namespace ChloeDemo
         {
             IQuery<User> q = context.Query<User>();
 
-            q.Select(a => AggregateFunctions.Count()).First();
+            q.Select(a => Sql.Count()).First();
             /*
              * SELECT TOP (1) COUNT(1) AS [C] FROM [Users] AS [Users]
              */
 
-            q.Select(a => new { Count = AggregateFunctions.Count(), LongCount = AggregateFunctions.LongCount(), Sum = AggregateFunctions.Sum(a.Age), Max = AggregateFunctions.Max(a.Age), Min = AggregateFunctions.Min(a.Age), Average = AggregateFunctions.Average(a.Age) }).First();
+            q.Select(a => new { Count = Sql.Count(), LongCount = Sql.LongCount(), Sum = Sql.Sum(a.Age), Max = Sql.Max(a.Age), Min = Sql.Min(a.Age), Average = Sql.Average(a.Age) }).First();
             /*
              * SELECT TOP (1) COUNT(1) AS [Count],COUNT_BIG(1) AS [LongCount],CAST(SUM([Users].[Age]) AS INT) AS [Sum],MAX([Users].[Age]) AS [Max],MIN([Users].[Age]) AS [Min],CAST(AVG([Users].[Age]) AS FLOAT) AS [Average] FROM [Users] AS [Users]
              */
@@ -155,11 +198,95 @@ namespace ChloeDemo
 
             IGroupingQuery<User> g = q.Where(a => a.Id > 0).GroupBy(a => a.Age);
 
-            g = g.Having(a => a.Age > 1 && AggregateFunctions.Count() > 0);
+            g = g.Having(a => a.Age > 1 && Sql.Count() > 0);
 
-            g.Select(a => new { a.Age, Count = AggregateFunctions.Count(), Sum = AggregateFunctions.Sum(a.Age), Max = AggregateFunctions.Max(a.Age), Min = AggregateFunctions.Min(a.Age), Avg = AggregateFunctions.Average(a.Age) }).ToList();
+            g.Select(a => new { a.Age, Count = Sql.Count(), Sum = Sql.Sum(a.Age), Max = Sql.Max(a.Age), Min = Sql.Min(a.Age), Avg = Sql.Average(a.Age) }).ToList();
             /*
              * SELECT [Users].[Age] AS [Age],COUNT(1) AS [Count],CAST(SUM([Users].[Age]) AS INT) AS [Sum],MAX([Users].[Age]) AS [Max],MIN([Users].[Age]) AS [Min],CAST(AVG([Users].[Age]) AS FLOAT) AS [Avg] FROM [Users] AS [Users] WHERE [Users].[Id] > 0 GROUP BY [Users].[Age] HAVING ([Users].[Age] > 1 AND COUNT(1) > 0)
+             */
+
+            ConsoleHelper.WriteLineAndReadKey();
+        }
+
+        /*复杂查询*/
+        public static void ComplexQuery()
+        {
+            /*
+             * 支持 select * from Users where CityId in (1,2,3)    --in一个数组
+             * 支持 select * from Users where CityId in (select Id from City)    --in子查询
+             * 支持 select * from Users exists (select 1 from City where City.Id=Users.CityId)    --exists查询
+             * 支持 select (select top 1 CityName from City where Users.CityId==City.Id) as CityName, Users.Id, Users.Name from Users    --select子查询
+             * 支持 select 
+             *            (select count(*) from Users where Users.CityId=City.Id) as UserCount,     --总数
+             *            (select max(Users.Age) from Users where Users.CityId=City.Id) as MaxAge,  --最大年龄
+             *            (select avg(Users.Age) from Users where Users.CityId=City.Id) as AvgAge   --平均年龄
+             *      from City
+             *      --统计查询
+             */
+
+            IQuery<User> userQuery = context.Query<User>();
+            IQuery<City> cityQuery = context.Query<City>();
+
+            List<User> users = null;
+
+            /* in 一个数组 */
+            List<int> userIds = new List<int>() { 1, 2, 3 };
+            users = userQuery.Where(a => userIds.Contains(a.Id)).ToList();  /* list.Contains() 方法组合就会生成 in一个数组 sql 语句 */
+            /*
+             * SELECT 
+             *      [Users].[Gender] AS [Gender],[Users].[Age] AS [Age],[Users].[CityId] AS [CityId],[Users].[OpTime] AS [OpTime],[Users].[Id] AS [Id],[Users].[Name] AS [Name] 
+             * FROM [Users] AS [Users] 
+             * WHERE [Users].[Id] IN (1,2,3)
+             */
+
+
+            /* in 子查询 */
+            users = userQuery.Where(a => cityQuery.Select(c => c.Id).ToList().Contains((int)a.CityId)).ToList();  /* IQuery<T>.ToList().Contains() 方法组合就会生成 in 子查询 sql 语句 */
+            /*
+             * SELECT 
+             *      [Users].[Gender] AS [Gender],[Users].[Age] AS [Age],[Users].[CityId] AS [CityId],[Users].[OpTime] AS [OpTime],[Users].[Id] AS [Id],[Users].[Name] AS [Name] 
+             * FROM [Users] AS [Users] 
+             * WHERE [Users].[CityId] IN (SELECT [City].[Id] AS [C] FROM [City] AS [City])
+             */
+
+
+            /* IQuery<T>.Any() 方法组合就会生成 exists 子查询 sql 语句 */
+            users = userQuery.Where(a => cityQuery.Where(c => c.Id == a.CityId).Any()).ToList();
+            /*
+             * SELECT 
+             *      [Users].[Gender] AS [Gender],[Users].[Age] AS [Age],[Users].[CityId] AS [CityId],[Users].[OpTime] AS [OpTime],[Users].[Id] AS [Id],[Users].[Name] AS [Name] 
+             * FROM [Users] AS [Users] 
+             * WHERE Exists (SELECT N'1' AS [C] FROM [City] AS [City] WHERE [City].[Id] = [Users].[CityId])
+             */
+
+
+            /* select 子查询 */
+            var result = userQuery.Select(a => new
+            {
+                CityName = cityQuery.Where(c => c.Id == a.CityId).First().Name,
+                User = a
+            }).ToList();
+            /*
+             * SELECT 
+             *      (SELECT TOP (1) [City].[Name] AS [C] FROM [City] AS [City] WHERE [City].[Id] = [Users].[CityId]) AS [CityName],
+             *      [Users].[Gender] AS [Gender],[Users].[Age] AS [Age],[Users].[CityId] AS [CityId],[Users].[OpTime] AS [OpTime],[Users].[Id] AS [Id],[Users].[Name] AS [Name] 
+             * FROM [Users] AS [Users]
+             */
+
+
+            /* 统计 */
+            var statisticsResult = cityQuery.Select(a => new
+            {
+                UserCount = userQuery.Where(u => u.CityId == a.Id).Count(),
+                MaxAge = userQuery.Where(u => u.CityId == a.Id).Max(c => c.Age),
+                AvgAge = userQuery.Where(u => u.CityId == a.Id).Average(c => c.Age),
+            }).ToList();
+            /*
+             * SELECT 
+             *      (SELECT COUNT(1) AS [C] FROM [Users] AS [Users] WHERE [Users].[CityId] = [City].[Id]) AS [UserCount],
+             *      (SELECT MAX([Users].[Age]) AS [C] FROM [Users] AS [Users] WHERE [Users].[CityId] = [City].[Id]) AS [MaxAge],
+             *      (SELECT CAST(AVG([Users].[Age]) AS FLOAT) AS [C] FROM [Users] AS [Users] WHERE [Users].[CityId] = [City].[Id]) AS [AvgAge]
+             * FROM [City] AS [City]
              */
 
             ConsoleHelper.WriteLineAndReadKey();
@@ -192,6 +319,17 @@ namespace ChloeDemo
              */
 
             ConsoleHelper.WriteLineAndReadKey();
+        }
+        public static void BulkInsert()
+        {
+            List<User> models = new List<User>();
+            models.Add(new User() { Name = "lu", Age = 18, Gender = Gender.Woman, CityId = 1, OpTime = DateTime.Now });
+            models.Add(new User() { Name = "shuxin", Age = 18, Gender = Gender.Man, CityId = 1, OpTime = DateTime.Now });
+
+            /* 利用 SqlBulkCopy 批量插入数据 */
+            context.BulkInsert(models, batchSize: null, bulkCopyTimeout: null, keepIdentity: false);
+
+            ConsoleHelper.WriteLineAndReadKey(1);
         }
         public static void Update()
         {
@@ -291,17 +429,18 @@ namespace ChloeDemo
                 TrimEnd = a.Name.TrimEnd(space),//RTRIM([Users].[Name])
                 StartsWith = (bool?)a.Name.StartsWith("s"),//
                 EndsWith = (bool?)a.Name.EndsWith("s"),//
+                Replace = a.Name.Replace("l", "L"),
 
-                DiffYears = DbFunctions.DiffYears(startTime, endTime),//DATEDIFF(YEAR,@P_0,@P_1)
-                DiffMonths = DbFunctions.DiffMonths(startTime, endTime),//DATEDIFF(MONTH,@P_0,@P_1)
-                DiffDays = DbFunctions.DiffDays(startTime, endTime),//DATEDIFF(DAY,@P_0,@P_1)
-                DiffHours = DbFunctions.DiffHours(startTime, endTime),//DATEDIFF(HOUR,@P_0,@P_1)
-                DiffMinutes = DbFunctions.DiffMinutes(startTime, endTime),//DATEDIFF(MINUTE,@P_0,@P_1)
-                DiffSeconds = DbFunctions.DiffSeconds(startTime, endTime),//DATEDIFF(SECOND,@P_0,@P_1)
-                DiffMilliseconds = DbFunctions.DiffMilliseconds(startTime, endTime),//DATEDIFF(MILLISECOND,@P_0,@P_1)
-                //DiffMicroseconds = DbFunctions.DiffMicroseconds(startTime, endTime),//DATEDIFF(MICROSECOND,@P_0,@P_1)  Exception
+                DiffYears = Sql.DiffYears(startTime, endTime),//DATEDIFF(YEAR,@P_0,@P_1)
+                DiffMonths = Sql.DiffMonths(startTime, endTime),//DATEDIFF(MONTH,@P_0,@P_1)
+                DiffDays = Sql.DiffDays(startTime, endTime),//DATEDIFF(DAY,@P_0,@P_1)
+                DiffHours = Sql.DiffHours(startTime, endTime),//DATEDIFF(HOUR,@P_0,@P_1)
+                DiffMinutes = Sql.DiffMinutes(startTime, endTime),//DATEDIFF(MINUTE,@P_0,@P_1)
+                DiffSeconds = Sql.DiffSeconds(startTime, endTime),//DATEDIFF(SECOND,@P_0,@P_1)
+                DiffMilliseconds = Sql.DiffMilliseconds(startTime, endTime),//DATEDIFF(MILLISECOND,@P_0,@P_1)
+                //DiffMicroseconds = Sql.DiffMicroseconds(startTime, endTime),//DATEDIFF(MICROSECOND,@P_0,@P_1)  Exception
 
-                /* No longer support method 'DateTime.Subtract(DateTime d)', instead of using 'DbFunctions.DiffXX' */
+                /* No longer support method 'DateTime.Subtract(DateTime d)', instead of using 'Sql.DiffXX' */
                 //SubtractTotalDays = endTime.Subtract(startTime).TotalDays,//CAST(DATEDIFF(DAY,@P_0,@P_1)
                 //SubtractTotalHours = endTime.Subtract(startTime).TotalHours,//CAST(DATEDIFF(HOUR,@P_0,@P_1)
                 //SubtractTotalMinutes = endTime.Subtract(startTime).TotalMinutes,//CAST(DATEDIFF(MINUTE,@P_0,@P_1)
@@ -392,5 +531,6 @@ namespace ChloeDemo
 
             ConsoleHelper.WriteLineAndReadKey();
         }
+
     }
 }

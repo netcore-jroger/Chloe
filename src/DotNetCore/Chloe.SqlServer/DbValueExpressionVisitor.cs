@@ -78,6 +78,10 @@ namespace Chloe.SqlServer
         {
             return exp.Accept(this._generator);
         }
+        public override DbExpression Visit(DbNegateExpression exp)
+        {
+            return exp.Accept(this._generator);
+        }
         // <
         public override DbExpression Visit(DbLessThanExpression exp)
         {
@@ -175,6 +179,11 @@ namespace Chloe.SqlServer
         public override DbExpression Visit(DbDeleteExpression exp)
         {
             return exp.Accept(this._generator);
+        }
+
+        public override DbExpression Visit(DbExistsExpression exp)
+        {
+            return this.VisistDbBooleanExpression(exp);
         }
 
         DbExpression VisistDbBooleanExpression(DbExpression exp)

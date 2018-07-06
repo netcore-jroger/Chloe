@@ -20,7 +20,7 @@ namespace Chloe.SQLite
                 return CacheParameterNames[ordinal];
             }
 
-            return ParameterPrefix + ordinal.ToString();
+            return UtilConstants.ParameterNamePrefix + ordinal.ToString();
         }
         static void AmendDbInfo(DbExpression exp1, DbExpression exp2)
         {
@@ -92,6 +92,16 @@ namespace Chloe.SQLite
         {
             if (exp.Method.DeclaringType != ensureType)
                 throw UtilExceptions.NotSupportedMethod(exp.Method);
+        }
+        static void EnsureMethodDeclaringType(DbMethodCallExpression exp, params Type[] ensureTypes)
+        {
+            foreach (var type in ensureTypes)
+            {
+                if (exp.Method.DeclaringType == type)
+                    return;
+            }
+
+            throw UtilExceptions.NotSupportedMethod(exp.Method);
         }
         static void EnsureMethod(DbMethodCallExpression exp, MethodInfo methodInfo)
         {

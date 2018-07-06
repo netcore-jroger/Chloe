@@ -1,4 +1,5 @@
-﻿using Chloe.Extension;
+﻿using Chloe.Descriptors;
+using Chloe.Extension;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -49,9 +50,141 @@ namespace Chloe
             return source.WhereIfNotNull(val == string.Empty ? null : val, predicate);
         }
 
+        /// <summary>
+        /// dbContext.Query&lt;User&gt;().ToList&lt;UserModel&gt;()
+        /// <para>该方法调用者的 IQuery.ElementType 必须是实体类型</para> 
+        /// </summary>
+        /// <typeparam name="TModel"></typeparam>
+        /// <param name="source"></param>
+        /// <returns></returns>
+        public static List<TModel> ToList<TModel>(this IQuery source)
+        {
+            return source.MapTo<TModel>().ToList();
+        }
+        /// <summary>
+        /// dbContext.Query&lt;User&gt;().MapTo&lt;UserModel&gt;()
+        /// <para>该方法调用者的 IQuery.ElementType 必须是实体类型</para> 
+        /// </summary>
+        /// <typeparam name="TModel"></typeparam>
+        /// <param name="source"></param>
+        /// <returns></returns>
+        public static IQuery<TModel> MapTo<TModel>(this IQuery source)
+        {
+            /*
+             * 根据 TEntity 与 TModel 属性对应关系构建 selector 表达式树，最后调用 Select() 方法
+             * dbContext.Query<User>().Select(a => new UserModel() { Id = a.Id, Name = a.Name });
+             * ps: 只支持简单的映射，不支持复杂的对应关系
+             */
+
+            Utils.CheckNull(source);
+
+            List<MemberBinding> bindings = new List<MemberBinding>();
+
+            Type entityType = source.ElementType;
+            Type modelType = typeof(TModel);
+
+            TypeDescriptor typeDescriptor = TypeDescriptor.GetDescriptor(entityType);
+            var mappingMemberDescriptors = typeDescriptor.MappingMemberDescriptors.Select(a => a.Value).ToDictionary(a => a.MemberInfo.Name, a => a);
+
+            var props = modelType.GetProperties();
+            ParameterExpression parameter = Expression.Parameter(typeDescriptor.EntityType, "a");
+            foreach (var prop in props)
+            {
+                if (prop.GetSetMethod() == null)
+                    continue;
+
+                MappingMemberDescriptor mapMemberDescriptor;
+                if (mappingMemberDescriptors.TryGetValue(prop.Name, out mapMemberDescriptor) == false)
+                {
+                    continue;
+                }
+
+                Expression sourceMemberAccess = Expression.MakeMemberAccess(parameter, mapMemberDescriptor.MemberInfo);
+                if (prop.PropertyType != mapMemberDescriptor.MemberInfoType)
+                {
+                    sourceMemberAccess = Expression.Convert(sourceMemberAccess, prop.PropertyType);
+                }
+
+                MemberAssignment bind = Expression.Bind(prop, sourceMemberAccess);
+                bindings.Add(bind);
+            }
+
+            NewExpression newExp = Expression.New(modelType);
+            Expression selectorBody = Expression.MemberInit(newExp, bindings);
+
+            Type funcType = typeof(Func<,>).MakeGenericType(entityType, modelType);
+            LambdaExpression selector = Expression.Lambda(funcType, selectorBody, parameter);
+
+            MethodInfo methodInfo_Select = source.GetType().GetMethod("Select").MakeGenericMethod(modelType);
+            var obj = methodInfo_Select.Invoke(source, new object[] { selector });
+            return (IQuery<TModel>)obj;
+        }
 
         /// <summary>
-        /// 
+        /// dbContext.Query&lt;User&gt;().Ignore&lt;User&gt;(a => new { a.Name, a.Age }) or dbContext.Query&lt;User&gt;().Ignore&lt;User&gt;(a => new object[] { a.Name, a.Age })
+        /// </summary>
+        /// <typeparam name="TEntity"></typeparam>
+        /// <param name="source"></param>
+        /// <param name="fields"></param>
+        /// <returns></returns>
+        public static IQuery<TEntity> Ignore<TEntity>(this IQuery<TEntity> source, Expression<Func<TEntity, object>> fields)
+        {
+            Utils.CheckNull(fields);
+
+            List<string> fieldList = FieldsResolver.Resolve(fields);
+            return source.Ignore(fieldList.ToArray());
+        }
+        /// <summary>
+        /// dbContext.Query&lt;User&gt;().Ignore&lt;User&gt;("Name,Age", "NickName")
+        /// </summary>
+        /// <typeparam name="TEntity"></typeparam>
+        /// <param name="source"></param>
+        /// <param name="fields"></param>
+        /// <returns></returns>
+        public static IQuery<TEntity> Ignore<TEntity>(this IQuery<TEntity> source, params string[] fields)
+        {
+            Utils.CheckNull(source);
+
+            if (fields == null)
+                return source;
+
+            /* 支持 source.Ignore<User>("Name,Age", "NickName"); */
+            fields = fields.SelectMany(a => a.Split(',')).Select(a => a.Trim()).ToArray();
+
+            if (fields.Length == 0)
+                return source;
+
+            List<MemberBinding> bindings = new List<MemberBinding>();
+
+            Type entityType = source.ElementType;
+
+            TypeDescriptor typeDescriptor = TypeDescriptor.GetDescriptor(entityType);
+            var mappingMemberDescriptors = typeDescriptor.MappingMemberDescriptors.Select(a => a.Value).ToList();
+
+            ParameterExpression parameter = Expression.Parameter(entityType, "a");
+            foreach (var mappingMemberDescriptor in mappingMemberDescriptors)
+            {
+                if (fields.Any(a => a == mappingMemberDescriptor.MemberInfo.Name))
+                    continue;
+
+                Expression sourceMemberAccess = Expression.MakeMemberAccess(parameter, mappingMemberDescriptor.MemberInfo);
+                MemberAssignment bind = Expression.Bind(mappingMemberDescriptor.MemberInfo, sourceMemberAccess);
+                bindings.Add(bind);
+            }
+
+            if (bindings.Count == 0)
+                throw new Exception("There are no fields to map after ignore.");
+
+            NewExpression newExp = Expression.New(entityType);
+            Expression selectorBody = Expression.MemberInit(newExp, bindings);
+
+            Expression<Func<TEntity, TEntity>> selector = Expression.Lambda<Func<TEntity, TEntity>>(selectorBody, parameter);
+
+            return source.Select(selector);
+        }
+
+        /// <summary>
+        /// dbContext.Query&lt;User&gt;().OrderBy("Id asc,Age desc")
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="q"></param>

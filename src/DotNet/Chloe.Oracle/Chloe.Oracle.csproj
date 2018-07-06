@@ -40,11 +40,13 @@
     <Compile Include="ChloeOracleCommand.cs" />
     <Compile Include="ChloeOracleConnection.cs" />
     <Compile Include="ChloeOracleDataReader.cs" />
-    <Compile Include="DbContextServiceProvider.cs" />
+    <Compile Include="DatabaseProvider.cs" />
     <Compile Include="DbExpressionHelper.cs" />
     <Compile Include="DbExpressionTranslator.cs" />
+    <Compile Include="DbParamCollection.cs" />
     <Compile Include="DbValueExpressionVisitor.cs" />
     <Compile Include="ISqlBuilder.cs" />
+    <Compile Include="JoinConditionExpressionParser.cs" />
     <Compile Include="OracleContext.cs" />
     <Compile Include="OracleContext_Helper.cs" />
     <Compile Include="OracleSemantics.cs" />

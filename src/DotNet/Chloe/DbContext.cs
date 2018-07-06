@@ -44,11 +44,11 @@ namespace Chloe
             {
                 this.CheckDisposed();
                 if (this._adoSession == null)
-                    this._adoSession = new InternalAdoSession(this.DbContextServiceProvider.CreateConnection());
+                    this._adoSession = new InternalAdoSession(this.DatabaseProvider.CreateConnection());
                 return this._adoSession;
             }
         }
-        public abstract IDbContextServiceProvider DbContextServiceProvider { get; }
+        public abstract IDatabaseProvider DatabaseProvider { get; }
 
         protected DbContext()
         {
@@ -72,8 +72,8 @@ namespace Chloe
         }
         public virtual TEntity QueryByKey<TEntity>(object key, string table, bool tracking = false)
         {
-            Expression<Func<TEntity, bool>> predicate = BuildPredicate<TEntity>(key);
-            var q = this.Query<TEntity>(table).Where(predicate);
+            Expression<Func<TEntity, bool>> condition = BuildCondition<TEntity>(key);
+            var q = this.Query<TEntity>(table).Where(condition);
 
             if (tracking)
                 q = q.AsTracking();
@@ -129,6 +129,25 @@ namespace Chloe
             Utils.CheckNull(sql, "sql");
             return new InternalSqlQuery<T>(this, sql, cmdType, parameters);
         }
+        public IEnumerable<T> SqlQuery<T>(string sql, object parameter)
+        {
+            /*
+             * Usage:
+             * dbContext.SqlQuery<User>("select * from Users where Id=@Id", new { Id = 1 }).ToList();
+             */
+
+            return this.SqlQuery<T>(sql, this.BuildParams(parameter));
+        }
+        public IEnumerable<T> SqlQuery<T>(string sql, CommandType cmdType, object parameter)
+        {
+            /*
+             * Usage:
+             * dbContext.SqlQuery<User>("select * from Users where Id=@Id", CommandType.Text, new { Id = 1 }).ToList();
+             */
+
+            return this.SqlQuery<T>(sql, cmdType, this.BuildParams(parameter));
+        }
+
 
         public virtual TEntity Insert<TEntity>(TEntity entity)
         {
@@ -183,7 +202,7 @@ namespace Chloe
                 return entity;
             }
 
-            IDbExpressionTranslator translator = this.DbContextServiceProvider.CreateDbExpressionTranslator();
+            IDbExpressionTranslator translator = this.DatabaseProvider.CreateDbExpressionTranslator();
             List<DbParam> parameters;
             string sql = translator.Translate(e, out parameters);
 
@@ -272,7 +291,7 @@ namespace Chloe
                 return keyVal; /* It will return null if an entity does not define primary key. */
             }
 
-            IDbExpressionTranslator translator = this.DbContextServiceProvider.CreateDbExpressionTranslator();
+            IDbExpressionTranslator translator = this.DatabaseProvider.CreateDbExpressionTranslator();
             List<DbParam> parameters;
             string sql = translator.Translate(e, out parameters);
             sql = string.Concat(sql, ";", this.GetSelectLastInsertIdClause());
@@ -287,6 +306,10 @@ namespace Chloe
 
             retIdentity = ConvertIdentityType(retIdentity, autoIncrementMemberDescriptor.MemberInfoType);
             return retIdentity;
+        }
+        public virtual void InsertRange<TEntity>(List<TEntity> entities, bool keepIdentity = false)
+        {
+            throw new NotImplementedException();
         }
 
         public virtual int Update<TEntity>(TEntity entity)
@@ -439,8 +462,8 @@ namespace Chloe
         }
         public virtual int DeleteByKey<TEntity>(object key, string table)
         {
-            Expression<Func<TEntity, bool>> predicate = BuildPredicate<TEntity>(key);
-            return this.Delete<TEntity>(predicate, table);
+            Expression<Func<TEntity, bool>> condition = BuildCondition<TEntity>(key);
+            return this.Delete<TEntity>(condition, table);
         }
 
 
@@ -516,7 +539,7 @@ namespace Chloe
 
         int ExecuteSqlCommand(DbExpression e)
         {
-            IDbExpressionTranslator translator = this.DbContextServiceProvider.CreateDbExpressionTranslator();
+            IDbExpressionTranslator translator = this.DatabaseProvider.CreateDbExpressionTranslator();
             List<DbParam> parameters;
             string cmdText = translator.Translate(e, out parameters);
 

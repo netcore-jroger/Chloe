@@ -23,6 +23,8 @@ namespace Chloe.DbExpressions
         BitOr,
         Modulo,
 
+        Negate,
+
         Convert,
         Constant,
         Coalesce,
@@ -43,5 +45,7 @@ namespace Chloe.DbExpressions
         Insert,
         Update,
         Delete,
+
+        Exists,
     }
 }

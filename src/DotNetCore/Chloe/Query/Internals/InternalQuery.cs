@@ -5,6 +5,7 @@ using Chloe.Mapper;
 using Chloe.Query.Mapping;
 using Chloe.Query.QueryState;
 using Chloe.Query.Visitors;
+using Chloe.Utility;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
@@ -23,7 +24,7 @@ namespace Chloe.Query.Internals
 
         DbCommandFactor GenerateCommandFactor()
         {
-            IQueryState qs = QueryExpressionVisitor.VisitQueryExpression(this._query.QueryExpression);
+            IQueryState qs = QueryExpressionVisitor.VisitQueryExpression(this._query.QueryExpression, new ScopeParameterDictionary(), new KeyDictionary<string>());
             MappingData data = qs.GenerateMappingData();
 
             IObjectActivator objectActivator;
@@ -32,7 +33,7 @@ namespace Chloe.Query.Internals
             else
                 objectActivator = data.ObjectActivatorCreator.CreateObjectActivator();
 
-            IDbExpressionTranslator translator = this._query.DbContext.DbContextServiceProvider.CreateDbExpressionTranslator();
+            IDbExpressionTranslator translator = this._query.DbContext.DatabaseProvider.CreateDbExpressionTranslator();
             List<DbParam> parameters;
             string cmdText = translator.Translate(data.SqlQuery, out parameters);
 

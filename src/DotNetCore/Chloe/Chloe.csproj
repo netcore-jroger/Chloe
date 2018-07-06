@@ -1,46 +1,29 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Version>2.28.0</Version>
+    <AssemblyVersion>2.28.0.0</AssemblyVersion>
+    <FileVersion>2.28.0.0</FileVersion>
     <Description>A lightweight and high-performance Object/Relational Mapping(ORM) library.</Description>
-    <Copyright>Copyright 2016-2017.</Copyright>
-    <AssemblyTitle>Chloe.ORM</AssemblyTitle>
-    <VersionPrefix>2.6.0.0</VersionPrefix>
-    <Authors>Chloe</Authors>
-    <TargetFramework>netstandard1.6</TargetFramework>
-    <AssemblyName>Chloe</AssemblyName>
-    <PackageId>Chloe</PackageId>
-    <NetStandardImplicitPackageVersion>1.6.0</NetStandardImplicitPackageVersion>
-    <PackageTargetFallback>$(PackageTargetFallback);dnxcore50</PackageTargetFallback>
-    <GenerateAssemblyTitleAttribute>true</GenerateAssemblyTitleAttribute>
-    <GenerateAssemblyDescriptionAttribute>true</GenerateAssemblyDescriptionAttribute>
-    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+    <PackageId>ChloeCore</PackageId>
+    <Product>Chloe.ORM</Product>
+    <Authors>Shuxin Qin</Authors>
+    <Copyright>Copyright 2016-2018.</Copyright>
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
-    <GenerateAssemblyProductAttribute>true</GenerateAssemblyProductAttribute>
-    <GenerateAssemblyVersionAttribute>true</GenerateAssemblyVersionAttribute>
-    <GenerateAssemblyFileVersionAttribute>true</GenerateAssemblyFileVersionAttribute>
-    <Version>2.12.0.0</Version>
-    <AssemblyVersion>2.12.0.0</AssemblyVersion>
-    <FileVersion>2.12.0.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DocumentationFile>bin\Release\netstandard1.6\Chloe.xml</DocumentationFile>
+    <DocumentationFile>bin\Release\netstandard2.0\Chloe.xml</DocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Properties\AssemblyInfo.cs" />
-    <Compile Remove="Utility\UtilExceptions.cs" />
+    <Compile Remove="AggregateFunctions.cs" />
+    <Compile Remove="DbFunctions.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Data.Common" Version="4.1.0" />
-    <PackageReference Include="System.Reflection" Version="4.1.0" />
-    <PackageReference Include="System.Reflection.Emit" Version="4.0.1" />
-    <PackageReference Include="System.Reflection.TypeExtensions" Version="4.1.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Properties\" />
+    <PackageReference Include="System.Reflection.Emit" Version="4.3.0" />
   </ItemGroup>
 
 </Project>

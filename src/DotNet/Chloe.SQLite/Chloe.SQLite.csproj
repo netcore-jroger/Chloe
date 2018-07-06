@@ -41,10 +41,12 @@
     <Compile Include="ChloeSQLiteConcurrentConnection.cs" />
     <Compile Include="ChloeSQLiteDataReader.cs" />
     <Compile Include="ChloeSQLiteTransaction.cs" />
-    <Compile Include="DbContextServiceProvider.cs" />
+    <Compile Include="DatabaseProvider.cs" />
     <Compile Include="DbExpressionHelper.cs" />
     <Compile Include="DbExpressionTranslator.cs" />
+    <Compile Include="DbParamCollection.cs" />
     <Compile Include="ISqlBuilder.cs" />
+    <Compile Include="JoinConditionExpressionParser.cs" />
     <Compile Include="ReaderWriterLockWrapper.cs" />
     <Compile Include="SqlGenerator_BinaryWithMethodHandlers.cs" />
     <Compile Include="SQLiteContext.cs" />

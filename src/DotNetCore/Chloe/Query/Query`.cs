@@ -13,7 +13,7 @@ using Chloe.DbExpressions;
 
 namespace Chloe.Query
 {
-    class Query<T> : QueryBase, IQuery<T>
+    class Query<T> : QueryBase, IQuery<T>, IQuery
     {
         static readonly List<Expression> EmptyArgumentList = new List<Expression>(0);
 
@@ -22,6 +22,8 @@ namespace Chloe.Query
 
         internal bool _trackEntity = false;
         public DbContext DbContext { get { return this._dbContext; } }
+
+        Type IQuery.ElementType { get { return typeof(T); } }
 
         public Query(DbContext dbContext, string explicitTable)
             : this(dbContext, new RootQueryExpression(typeof(T), explicitTable), false)
@@ -49,19 +51,19 @@ namespace Chloe.Query
         public IQuery<T> Where(Expression<Func<T, bool>> predicate)
         {
             Utils.CheckNull(predicate);
-            WhereExpression e = new WhereExpression(_expression, typeof(T), predicate);
+            WhereExpression e = new WhereExpression(typeof(T), this._expression, predicate);
             return new Query<T>(this._dbContext, e, this._trackEntity);
         }
         public IOrderedQuery<T> OrderBy<K>(Expression<Func<T, K>> keySelector)
         {
             Utils.CheckNull(keySelector);
-            OrderExpression e = new OrderExpression(QueryExpressionType.OrderBy, typeof(T), this._expression, keySelector);
+            OrderExpression e = new OrderExpression(typeof(T), this._expression, QueryExpressionType.OrderBy, keySelector);
             return new OrderedQuery<T>(this._dbContext, e, this._trackEntity);
         }
         public IOrderedQuery<T> OrderByDesc<K>(Expression<Func<T, K>> keySelector)
         {
             Utils.CheckNull(keySelector);
-            OrderExpression e = new OrderExpression(QueryExpressionType.OrderByDesc, typeof(T), this._expression, keySelector);
+            OrderExpression e = new OrderExpression(typeof(T), this._expression, QueryExpressionType.OrderByDesc, keySelector);
             return new OrderedQuery<T>(this._dbContext, e, this._trackEntity);
         }
         public IQuery<T> Skip(int count)
@@ -88,7 +90,11 @@ namespace Chloe.Query
             Utils.CheckNull(keySelector);
             return new GroupingQuery<T>(this, keySelector);
         }
-
+        public IQuery<T> Distinct()
+        {
+            DistinctExpression e = new DistinctExpression(typeof(T), this._expression);
+            return new Query<T>(this._dbContext, e, this._trackEntity);
+        }
 
         public IJoiningQuery<T, TOther> Join<TOther>(JoinType joinType, Expression<Func<T, TOther, bool>> on)
         {
@@ -230,41 +236,41 @@ namespace Chloe.Query
             return this.ExecuteAggregateQuery<float?>(GetCalledMethod(() => default(IQuery<T>).Sum(default(Expression<Func<T, float?>>))), selector);
         }
 
-        public double Average(Expression<Func<T, int>> selector)
+        public double? Average(Expression<Func<T, int>> selector)
         {
-            return this.ExecuteAggregateQuery<double>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, int>>))), selector);
+            return this.ExecuteAggregateQuery<double?>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, int>>))), selector);
         }
         public double? Average(Expression<Func<T, int?>> selector)
         {
-            return this.ExecuteAggregateQuery<double>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, int?>>))), selector);
+            return this.ExecuteAggregateQuery<double?>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, int?>>))), selector);
         }
-        public double Average(Expression<Func<T, long>> selector)
+        public double? Average(Expression<Func<T, long>> selector)
         {
-            return this.ExecuteAggregateQuery<double>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, long>>))), selector);
+            return this.ExecuteAggregateQuery<double?>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, long>>))), selector);
         }
         public double? Average(Expression<Func<T, long?>> selector)
         {
             return this.ExecuteAggregateQuery<double?>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, long?>>))), selector);
         }
-        public decimal Average(Expression<Func<T, decimal>> selector)
+        public decimal? Average(Expression<Func<T, decimal>> selector)
         {
-            return this.ExecuteAggregateQuery<decimal>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, decimal>>))), selector);
+            return this.ExecuteAggregateQuery<decimal?>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, decimal>>))), selector);
         }
         public decimal? Average(Expression<Func<T, decimal?>> selector)
         {
             return this.ExecuteAggregateQuery<decimal?>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, decimal?>>))), selector);
         }
-        public double Average(Expression<Func<T, double>> selector)
+        public double? Average(Expression<Func<T, double>> selector)
         {
-            return this.ExecuteAggregateQuery<double>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, double>>))), selector);
+            return this.ExecuteAggregateQuery<double?>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, double>>))), selector);
         }
         public double? Average(Expression<Func<T, double?>> selector)
         {
             return this.ExecuteAggregateQuery<double?>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, double?>>))), selector);
         }
-        public float Average(Expression<Func<T, float>> selector)
+        public float? Average(Expression<Func<T, float>> selector)
         {
-            return this.ExecuteAggregateQuery<float>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, float>>))), selector);
+            return this.ExecuteAggregateQuery<float?>(GetCalledMethod(() => default(IQuery<T>).Average(default(Expression<Func<T, float>>))), selector);
         }
         public float? Average(Expression<Func<T, float?>> selector)
         {
@@ -296,16 +302,22 @@ namespace Chloe.Query
                 Utils.CheckNull(argument);
 
             List<Expression> arguments = argument == null ? EmptyArgumentList : new List<Expression>(1) { argument };
-
-            IEnumerable<TResult> iterator = this.CreateAggregateQuery<TResult>(method, arguments);
+            var q = this.CreateAggregateQuery<TResult>(method, arguments);
+            InternalQuery<TResult> iterator = q.GenerateIterator();
             return iterator.Single();
         }
-        InternalQuery<TResult> CreateAggregateQuery<TResult>(MethodInfo method, List<Expression> arguments)
+        /// <summary>
+        /// 类<see cref="Chloe.Query.Visitors.GeneralExpressionVisitor"/>有引用该方法[反射]
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="method"></param>
+        /// <param name="arguments"></param>
+        /// <returns></returns>
+        public Query<TResult> CreateAggregateQuery<TResult>(MethodInfo method, List<Expression> arguments)
         {
             AggregateQueryExpression e = new AggregateQueryExpression(this._expression, method, arguments);
             var q = new Query<TResult>(this._dbContext, e, false);
-            InternalQuery<TResult> iterator = q.GenerateIterator();
-            return iterator;
+            return q;
         }
         MethodInfo GetCalledMethod<TResult>(Expression<Func<TResult>> exp)
         {

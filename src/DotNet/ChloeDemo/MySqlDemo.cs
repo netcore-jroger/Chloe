@@ -17,6 +17,7 @@ namespace ChloeDemo
             JoinQuery();
             AggregateQuery();
             GroupQuery();
+            ComplexQuery();  /* v2.18复杂查询 */
             Insert();
             Update();
             Delete();
@@ -38,16 +39,57 @@ namespace ChloeDemo
              * SELECT `Users`.`Id` AS `Id`,`Users`.`Name` AS `Name`,`Users`.`Gender` AS `Gender`,`Users`.`Age` AS `Age`,`Users`.`CityId` AS `CityId`,`Users`.`OpTime` AS `OpTime` FROM `Users` AS `Users` WHERE `Users`.`Id` = 1 LIMIT 0,1
              */
 
+
             //可以选取指定的字段
             q.Where(a => a.Id == 1).Select(a => new { a.Id, a.Name }).FirstOrDefault();
             /*
              * SELECT `Users`.`Id` AS `Id`,`Users`.`Name` AS `Name` FROM `Users` AS `Users` WHERE `Users`.`Id` = 1 LIMIT 0,1
              */
 
+
             //分页
             q.Where(a => a.Id > 0).OrderBy(a => a.Age).Skip(20).Take(10).ToList();
             /*
              * SELECT `Users`.`Id` AS `Id`,`Users`.`Name` AS `Name`,`Users`.`Gender` AS `Gender`,`Users`.`Age` AS `Age`,`Users`.`CityId` AS `CityId`,`Users`.`OpTime` AS `OpTime` FROM `Users` AS `Users` WHERE `Users`.`Id` > 0 ORDER BY `Users`.`Age` ASC LIMIT 20,10
+             */
+
+
+            /* like 查询 */
+            q.Where(a => a.Name.Contains("so") || a.Name.StartsWith("s") || a.Name.EndsWith("o")).ToList();
+            /*
+             * SELECT 
+             *      `Users`.`Gender` AS `Gender`,`Users`.`Age` AS `Age`,`Users`.`CityId` AS `CityId`,`Users`.`OpTime` AS `OpTime`,`Users`.`Id` AS `Id`,`Users`.`Name` AS `Name` 
+             * FROM `Users` AS `Users` 
+             * WHERE (`Users`.`Name` LIKE CONCAT('%',N'so','%') OR `Users`.`Name` LIKE CONCAT(N's','%') OR `Users`.`Name` LIKE CONCAT('%',N'o'))
+             */
+
+
+            /* in 一个数组 */
+            List<User> users = null;
+            List<int> userIds = new List<int>() { 1, 2, 3 };
+            users = q.Where(a => userIds.Contains(a.Id)).ToList(); /* list.Contains() 方法组合就会生成 in一个数组 sql 语句 */
+            /*
+             * SELECT 
+             *      `Users`.`Gender` AS `Gender`,`Users`.`Age` AS `Age`,`Users`.`CityId` AS `CityId`,`Users`.`OpTime` AS `OpTime`,`Users`.`Id` AS `Id`,`Users`.`Name` AS `Name` 
+             * FROM `Users` AS `Users` 
+             * WHERE `Users`.`Id` IN (1,2,3)
+             */
+
+
+            /* in 子查询 */
+            users = q.Where(a => context.Query<City>().Select(c => c.Id).ToList().Contains((int)a.CityId)).ToList(); /* IQuery<T>.ToList().Contains() 方法组合就会生成 in 子查询 sql 语句 */
+            /*
+             * SELECT 
+             *      `Users`.`Gender` AS `Gender`,`Users`.`Age` AS `Age`,`Users`.`CityId` AS `CityId`,`Users`.`OpTime` AS `OpTime`,`Users`.`Id` AS `Id`,`Users`.`Name` AS `Name` 
+             * FROM `Users` AS `Users` 
+             * WHERE `Users`.`CityId` IN (SELECT `City`.`Id` AS `C` FROM `City` AS `City`)
+             */
+
+
+            /* distinct 查询 */
+            q.Select(a => new { a.Name }).Distinct().ToList();
+            /*
+             * SELECT DISTINCT `Users`.`Name` AS `Name` FROM `Users` AS `Users`
              */
 
             ConsoleHelper.WriteLineAndReadKey();
@@ -72,8 +114,8 @@ namespace ChloeDemo
 
 
             /* quick join and paging. */
-            context.JoinQuery<User, City>((user, city) => new object[] 
-            { 
+            context.JoinQuery<User, City>((user, city) => new object[]
+            {
                 JoinType.LeftJoin, user.CityId == city.Id
             })
             .Select((user, city) => new { User = user, City = city })
@@ -82,8 +124,8 @@ namespace ChloeDemo
             .TakePage(1, 20)
             .ToList();
 
-            context.JoinQuery<User, City, Province>((user, city, province) => new object[] 
-            { 
+            context.JoinQuery<User, City, Province>((user, city, province) => new object[]
+            {
                 JoinType.LeftJoin, user.CityId == city.Id,          /* 表 User 和 City 进行Left连接 */
                 JoinType.LeftJoin, city.ProvinceId == province.Id   /* 表 City 和 Province 进行Left连接 */
             })
@@ -99,12 +141,12 @@ namespace ChloeDemo
         {
             IQuery<User> q = context.Query<User>();
 
-            q.Select(a => AggregateFunctions.Count()).First();
+            q.Select(a => Sql.Count()).First();
             /*
              * SELECT COUNT(1) AS `C` FROM `Users` AS `Users` LIMIT 0,1
              */
 
-            q.Select(a => new { Count = AggregateFunctions.Count(), LongCount = AggregateFunctions.LongCount(), Sum = AggregateFunctions.Sum(a.Age), Max = AggregateFunctions.Max(a.Age), Min = AggregateFunctions.Min(a.Age), Average = AggregateFunctions.Average(a.Age) }).First();
+            q.Select(a => new { Count = Sql.Count(), LongCount = Sql.LongCount(), Sum = Sql.Sum(a.Age), Max = Sql.Max(a.Age), Min = Sql.Min(a.Age), Average = Sql.Average(a.Age) }).First();
             /*
              * SELECT COUNT(1) AS `Count`,COUNT(1) AS `LongCount`,CAST(SUM(`Users`.`Age`) AS SIGNED) AS `Sum`,MAX(`Users`.`Age`) AS `Max`,MIN(`Users`.`Age`) AS `Min`,AVG(`Users`.`Age`) AS `Average` FROM `Users` AS `Users` LIMIT 0,1
              */
@@ -147,11 +189,95 @@ namespace ChloeDemo
 
             IGroupingQuery<User> g = q.Where(a => a.Id > 0).GroupBy(a => a.Age);
 
-            g = g.Having(a => a.Age > 1 && AggregateFunctions.Count() > 0);
+            g = g.Having(a => a.Age > 1 && Sql.Count() > 0);
 
-            g.Select(a => new { a.Age, Count = AggregateFunctions.Count(), Sum = AggregateFunctions.Sum(a.Age), Max = AggregateFunctions.Max(a.Age), Min = AggregateFunctions.Min(a.Age), Avg = AggregateFunctions.Average(a.Age) }).ToList();
+            g.Select(a => new { a.Age, Count = Sql.Count(), Sum = Sql.Sum(a.Age), Max = Sql.Max(a.Age), Min = Sql.Min(a.Age), Avg = Sql.Average(a.Age) }).ToList();
             /*
              * SELECT `Users`.`Age` AS `Age`,COUNT(1) AS `Count`,CAST(SUM(`Users`.`Age`) AS SIGNED) AS `Sum`,MAX(`Users`.`Age`) AS `Max`,MIN(`Users`.`Age`) AS `Min`,AVG(`Users`.`Age`) AS `Avg` FROM `Users` AS `Users` WHERE `Users`.`Id` > 0 GROUP BY `Users`.`Age` HAVING (`Users`.`Age` > 1 AND COUNT(1) > 0)
+             */
+
+            ConsoleHelper.WriteLineAndReadKey();
+        }
+
+        /*复杂查询*/
+        public static void ComplexQuery()
+        {
+            /*
+             * 支持 select * from Users where CityId in (1,2,3)    --in一个数组
+             * 支持 select * from Users where CityId in (select Id from City)    --in子查询
+             * 支持 select * from Users exists (select 1 from City where City.Id=Users.CityId)    --exists查询
+             * 支持 select (select top 1 CityName from City where Users.CityId==City.Id) as CityName, Users.Id, Users.Name from Users    --select子查询
+             * 支持 select 
+             *            (select count(*) from Users where Users.CityId=City.Id) as UserCount,     --总数
+             *            (select max(Users.Age) from Users where Users.CityId=City.Id) as MaxAge,  --最大年龄
+             *            (select avg(Users.Age) from Users where Users.CityId=City.Id) as AvgAge   --平均年龄
+             *      from City
+             *      --统计查询
+             */
+
+            IQuery<User> userQuery = context.Query<User>();
+            IQuery<City> cityQuery = context.Query<City>();
+
+            List<User> users = null;
+
+            /* in 一个数组 */
+            List<int> userIds = new List<int>() { 1, 2, 3 };
+            users = userQuery.Where(a => userIds.Contains(a.Id)).ToList();  /* list.Contains() 方法组合就会生成 in一个数组 sql 语句 */
+            /*
+             * SELECT 
+             *      `Users`.`Gender` AS `Gender`,`Users`.`Age` AS `Age`,`Users`.`CityId` AS `CityId`,`Users`.`OpTime` AS `OpTime`,`Users`.`Id` AS `Id`,`Users`.`Name` AS `Name` 
+             * FROM `Users` AS `Users` 
+             * WHERE `Users`.`Id` IN (1,2,3)
+             */
+
+
+            /* in 子查询 */
+            users = userQuery.Where(a => cityQuery.Select(c => c.Id).ToList().Contains((int)a.CityId)).ToList();  /* IQuery<T>.ToList().Contains() 方法组合就会生成 in 子查询 sql 语句 */
+            /*
+             * SELECT 
+             *      `Users`.`Gender` AS `Gender`,`Users`.`Age` AS `Age`,`Users`.`CityId` AS `CityId`,`Users`.`OpTime` AS `OpTime`,`Users`.`Id` AS `Id`,`Users`.`Name` AS `Name` 
+             * FROM `Users` AS `Users` 
+             * WHERE `Users`.`CityId` IN (SELECT `City`.`Id` AS `C` FROM `City` AS `City`)
+             */
+
+
+            /* IQuery<T>.Any() 方法组合就会生成 exists 子查询 sql 语句 */
+            users = userQuery.Where(a => cityQuery.Where(c => c.Id == a.CityId).Any()).ToList();
+            /*
+             * SELECT 
+             *      `Users`.`Gender` AS `Gender`,`Users`.`Age` AS `Age`,`Users`.`CityId` AS `CityId`,`Users`.`OpTime` AS `OpTime`,`Users`.`Id` AS `Id`,`Users`.`Name` AS `Name` 
+             * FROM `Users` AS `Users` 
+             * WHERE Exists (SELECT N'1' AS `C` FROM `City` AS `City` WHERE `City`.`Id` = `Users`.`CityId`)
+             */
+
+
+            /* select 子查询 */
+            var result = userQuery.Select(a => new
+            {
+                CityName = cityQuery.Where(c => c.Id == a.CityId).First().Name,
+                User = a
+            }).ToList();
+            /*
+             * SELECT 
+             *      (SELECT `City`.`Name` AS `C` FROM `City` AS `City` WHERE `City`.`Id` = `Users`.`CityId` LIMIT 0,1) AS `CityName`,
+             *      `Users`.`Gender` AS `Gender`,`Users`.`Age` AS `Age`,`Users`.`CityId` AS `CityId`,`Users`.`OpTime` AS `OpTime`,`Users`.`Id` AS `Id`,`Users`.`Name` AS `Name` 
+             * FROM `Users` AS `Users`
+             */
+
+
+            /* 统计 */
+            var statisticsResult = cityQuery.Select(a => new
+            {
+                UserCount = userQuery.Where(u => u.CityId == a.Id).Count(),
+                MaxAge = userQuery.Where(u => u.CityId == a.Id).Max(c => c.Age),
+                AvgAge = userQuery.Where(u => u.CityId == a.Id).Average(c => c.Age),
+            }).ToList();
+            /*
+             * SELECT 
+             *      (SELECT COUNT(1) AS `C` FROM `Users` AS `Users` WHERE `Users`.`CityId` = `City`.`Id`) AS `UserCount`,
+             *      (SELECT MAX(`Users`.`Age`) AS `C` FROM `Users` AS `Users` WHERE `Users`.`CityId` = `City`.`Id`) AS `MaxAge`,
+             *      (SELECT AVG(`Users`.`Age`) AS `C` FROM `Users` AS `Users` WHERE `Users`.`CityId` = `City`.`Id`) AS `AvgAge` 
+             * FROM `City` AS `City`
              */
 
             ConsoleHelper.WriteLineAndReadKey();
@@ -284,15 +410,16 @@ namespace ChloeDemo
                 TrimEnd = a.Name.TrimEnd(space),//RTRIM(`Users`.`Name`)
                 StartsWith = (bool?)a.Name.StartsWith("s"),//`Users`.`Name` LIKE CONCAT(N's','%')
                 EndsWith = (bool?)a.Name.EndsWith("s"),//`Users`.`Name` LIKE CONCAT('%',N's')
+                Replace = a.Name.Replace("l", "L"),
 
-                DiffYears = DbFunctions.DiffYears(startTime, endTime),//TIMESTAMPDIFF(YEAR,?P_0,?P_1)
-                DiffMonths = DbFunctions.DiffMonths(startTime, endTime),//TIMESTAMPDIFF(MONTH,?P_0,?P_1)
-                DiffDays = DbFunctions.DiffDays(startTime, endTime),//TIMESTAMPDIFF(DAY,?P_0,?P_1)
-                DiffHours = DbFunctions.DiffHours(startTime, endTime),//TIMESTAMPDIFF(HOUR,?P_0,?P_1)
-                DiffMinutes = DbFunctions.DiffMinutes(startTime, endTime),//TIMESTAMPDIFF(MINUTE,?P_0,?P_1)
-                DiffSeconds = DbFunctions.DiffSeconds(startTime, endTime),//TIMESTAMPDIFF(SECOND,?P_0,?P_1)
-                //DiffMilliseconds = DbFunctions.DiffMilliseconds(startTime, endTime),//MySql 不支持 Millisecond
-                //DiffMicroseconds = DbFunctions.DiffMicroseconds(startTime, endTime),//ex
+                DiffYears = Sql.DiffYears(startTime, endTime),//TIMESTAMPDIFF(YEAR,?P_0,?P_1)
+                DiffMonths = Sql.DiffMonths(startTime, endTime),//TIMESTAMPDIFF(MONTH,?P_0,?P_1)
+                DiffDays = Sql.DiffDays(startTime, endTime),//TIMESTAMPDIFF(DAY,?P_0,?P_1)
+                DiffHours = Sql.DiffHours(startTime, endTime),//TIMESTAMPDIFF(HOUR,?P_0,?P_1)
+                DiffMinutes = Sql.DiffMinutes(startTime, endTime),//TIMESTAMPDIFF(MINUTE,?P_0,?P_1)
+                DiffSeconds = Sql.DiffSeconds(startTime, endTime),//TIMESTAMPDIFF(SECOND,?P_0,?P_1)
+                //DiffMilliseconds = Sql.DiffMilliseconds(startTime, endTime),//MySql 不支持 Millisecond
+                //DiffMicroseconds = Sql.DiffMicroseconds(startTime, endTime),//ex
 
                 Now = DateTime.Now,//NOW()
                 UtcNow = DateTime.UtcNow,//UTC_TIMESTAMP()

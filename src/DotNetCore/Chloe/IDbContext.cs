@@ -51,6 +51,15 @@ namespace Chloe
 
         IEnumerable<T> SqlQuery<T>(string sql, params DbParam[] parameters);
         IEnumerable<T> SqlQuery<T>(string sql, CommandType cmdType, params DbParam[] parameters);
+        /// <summary>
+        /// dbContext.SqlQuery&lt;User&gt;("select * from Users where Id=@Id", new { Id = 1 }).ToList();
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="sql"></param>
+        /// <param name="parameter"></param>
+        /// <returns></returns>
+        IEnumerable<T> SqlQuery<T>(string sql, object parameter);
+        IEnumerable<T> SqlQuery<T>(string sql, CommandType cmdType, object parameter);
 
         TEntity Insert<TEntity>(TEntity entity);
         TEntity Insert<TEntity>(TEntity entity, string table);
@@ -62,6 +71,13 @@ namespace Chloe
         /// <returns>It will return null if an entity does not define primary key,other wise return primary key value.</returns>
         object Insert<TEntity>(Expression<Func<TEntity>> content);
         object Insert<TEntity>(Expression<Func<TEntity>> content, string table);
+        /// <summary>
+        /// 批量插入操作
+        /// </summary>
+        /// <typeparam name="TEntity"></typeparam>
+        /// <param name="entities"></param>
+        /// <param name="keepIdentity">是否要把自增属性值插入到数据库</param>
+        void InsertRange<TEntity>(List<TEntity> entities, bool keepIdentity = false);
 
         int Update<TEntity>(TEntity entity);
         int Update<TEntity>(TEntity entity, string table);

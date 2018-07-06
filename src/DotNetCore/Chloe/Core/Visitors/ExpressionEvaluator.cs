@@ -52,7 +52,7 @@ namespace Chloe.Core.Visitors
             if (operandValue == null)
             {
                 //(int)null
-                if (exp.Type.IsValueType() && !exp.Type.IsNullable())
+                if (exp.Type.IsValueType && !exp.Type.IsNullable())
                     throw new NullReferenceException();
 
                 return null;
@@ -110,6 +110,11 @@ namespace Chloe.Core.Visitors
             }
 
             throw new NotSupportedException(string.Format("Does not support the type '{0}' converted to type '{1}'.", operandValueType.FullName, exp.Type.FullName));
+        }
+        protected override object VisitUnary_Quote(UnaryExpression exp)
+        {
+            var e = ExpressionExtension.StripQuotes(exp);
+            return e;
         }
         protected override object VisitConstant(ConstantExpression exp)
         {

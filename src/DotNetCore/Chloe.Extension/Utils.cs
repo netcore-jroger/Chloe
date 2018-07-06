@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Chloe.Infrastructure;
+using Chloe.InternalExtensions;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -15,41 +17,61 @@ namespace Chloe.Extension
             if (obj == null)
                 throw new ArgumentNullException(paramName);
         }
-        public static Expression MakeWrapperAccess(object value, Type targetType)
+        public static bool AreEqual(object obj1, object obj2)
         {
-            object wrapper;
-            Type wrapperType;
+            if (obj1 == null && obj2 == null)
+                return true;
 
-            if (value == null)
+            if (obj1 != null)
             {
-                if (targetType != null)
-                    return Expression.Constant(value, targetType);
-                else
-                    return Expression.Constant(value, typeof(object));
-            }
-            else
-            {
-                Type valueType = value.GetType();
-                wrapperType = typeof(ConstantWrapper<>).MakeGenericType(valueType);
-                ConstructorInfo constructor = wrapperType.GetConstructor(new Type[] { valueType });
-                wrapper = constructor.Invoke(new object[] { value });
+                return obj1.Equals(obj2);
             }
 
-            ConstantExpression wrapperConstantExp = Expression.Constant(wrapper);
-            Expression ret = Expression.MakeMemberAccess(wrapperConstantExp, wrapperType.GetProperty("Value"));
-
-            if (ret.Type != targetType)
+            if (obj2 != null)
             {
-                ret = Expression.Convert(ret, targetType);
+                return obj2.Equals(obj1);
             }
 
-            return ret;
+            return object.Equals(obj1, obj2);
         }
         public static Task<T> MakeTask<T>(Func<T> func)
         {
             var task = new Task<T>(func);
             task.Start();
             return task;
+        }
+
+        public static DbParam[] BuildParams(IDbContext dbContext, object parameter)
+        {
+            if (parameter == null)
+                return new DbParam[0];
+
+            if (parameter is IEnumerable<DbParam>)
+            {
+                return ((IEnumerable<DbParam>)parameter).ToArray();
+            }
+
+            IDatabaseProvider databaseProvider = ((DbContext)dbContext).DatabaseProvider;
+
+            List<DbParam> parameters = new List<DbParam>();
+            Type parameterType = parameter.GetType();
+            var props = parameterType.GetProperties();
+            foreach (var prop in props)
+            {
+                if (prop.GetGetMethod() == null)
+                {
+                    continue;
+                }
+
+                object value = ReflectionExtension.GetMemberValue(prop, parameter);
+
+                string paramName = databaseProvider.CreateParameterName(prop.Name);
+
+                DbParam p = new DbParam(paramName, value, prop.PropertyType);
+                parameters.Add(p);
+            }
+
+            return parameters.ToArray();
         }
     }
 }
